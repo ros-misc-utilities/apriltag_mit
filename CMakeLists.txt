@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
-project(april_tags)
+project(apriltags)
 
 # pull in the pods macros. See cmake/pods.cmake for documentation
-set(POD_NAME april_tags)
+set(POD_NAME apriltags)
 include(cmake/pods.cmake)
 
 file(GLOB SOURCE_FILES "src/*.cc")
@@ -17,7 +17,7 @@ pods_install_libraries(apriltags)
 file(GLOB header_files "AprilTags/*.h")
 pods_install_headers(${header_files} DESTINATION AprilTags/)
 
-pods_install_pkg_config_file(april_tags
+pods_install_pkg_config_file(apriltags
     LIBS -lapriltags
     REQUIRES eigen3 opencv
     VERSION 1.0.0)
