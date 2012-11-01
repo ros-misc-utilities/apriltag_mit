@@ -44,12 +44,23 @@ void draw_detection(cv::Mat& image, const AprilTags::TagDetection& detection) {
 }
 
 int main(int argc, char* argv[]) {
+  int device_id;
+  if (argc==1) {
+    device_id = 0;
+  } else {
+    device_id = atoi(argv[1]);
+  }
 
   // find any available camera (laptop camera, web cam etc)
-  cv::VideoCapture cap(0);
+  cv::VideoCapture cap(device_id);
   if(!cap.isOpened()) {
-    cerr << "ERROR: Can't find any video device\n";
+    cerr << "ERROR: Can't find video device " << device_id << "\n";
     return -1;
+  }
+  if (cap.get(CV_CAP_PROP_FRAME_WIDTH) < 640) {
+    // some cams provide a small image by default, try to get a larger one
+    cap.set(CV_CAP_PROP_FRAME_WIDTH, 640);
+    cap.set(CV_CAP_PROP_FRAME_HEIGHT, 480);
   }
 
   // determines which family of April tags is detected
