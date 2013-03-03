@@ -5,12 +5,37 @@
  *
  */
 
+#include <iostream>
 #include <cstring>
+
+const std::string usage = "\n"
+    "Usage:\n"
+    "  apriltags_demo [OPTION...] [deviceID]\n"
+    "\n"
+    "Options:\n"
+    "  -h  -?       show help options\n"
+    "  -d           disable graphics\n"
+    "\n";
+
+const std::string intro = "\n"
+    "April tags test code\n"
+    "(C) 2012-2013 Massachusetts Institute of Technology\n"
+    "Michael Kaess\n"
+    "\n";
+
+
+#include <sys/time.h>
 
 #include "opencv2/opencv.hpp"
 
 #include "AprilTags/TagDetector.h"
 #include "AprilTags/Tag36h11.h"
+
+// for getopt / command line options processing
+#include <unistd.h>
+extern int optind;
+extern char *optarg;
+
 
 using namespace std;
 
@@ -43,12 +68,50 @@ void draw_detection(cv::Mat& image, const AprilTags::TagDetection& detection) {
               cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0,0,255));
 }
 
+double tic() {
+  struct timeval t;
+  gettimeofday(&t, NULL);
+  return ((double)t.tv_sec + ((double)t.tv_usec)/1000000.);
+}
+
 int main(int argc, char* argv[]) {
-  int device_id;
-  if (argc==1) {
-    device_id = 0;
-  } else {
-    device_id = atoi(argv[1]);
+  bool draw = true;
+  int width = 640;
+  int height = 480;
+
+  int c;
+  while ((c = getopt(argc, argv, ":h?dW:H:")) != -1) {
+    // Each option character has to be in the string in getopt();
+    // the first colon changes the error character from '?' to ':';
+    // a colon after an option means that there is an extra
+    // parameter to this option; 'W' is a reserved character
+    switch (c) {
+    case 'h':
+    case '?':
+      cout << intro;
+      cout << usage;
+      exit(0);
+      break;
+    case 'd':
+      draw = false;
+      break;
+    case 'W':
+      width = atoi(optarg);
+      break;
+    case 'H':
+      height = atoi(optarg);
+      break;
+    case ':': // unknown option, from getopt
+      cout << intro;
+      cout << usage;
+      exit(1);
+      break;
+    }
+  }
+
+  int device_id = 0;
+  if (argc == optind + 1) {
+    device_id = atoi(argv[optind]);
   }
 
   // find any available camera (laptop camera, web cam etc)
@@ -57,21 +120,27 @@ int main(int argc, char* argv[]) {
     cerr << "ERROR: Can't find video device " << device_id << "\n";
     return -1;
   }
-  if (cap.get(CV_CAP_PROP_FRAME_WIDTH) < 640) {
+  //  if (cap.get(CV_CAP_PROP_FRAME_WIDTH) < 640) {
     // some cams provide a small image by default, try to get a larger one
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, 640);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, 480);
-  }
+    cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
+    cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
+    //  }
 
   // determines which family of April tags is detected
   AprilTags::TagDetector tag_detector(AprilTags::tagCodes36h11);
 
-  cv::namedWindow(window_name, 1);
+  if (draw) {
+    cv::namedWindow(window_name, 1);
+  }
   cv::Mat color;
   cv::Mat gray;
+
+  int frame = 0;
+  double last_t = tic();
   while (true) {
 
     // capture frame
+    //    if (frame==0)
     cap >> color;
 
     cv::cvtColor(color, gray, CV_BGR2GRAY);
@@ -84,8 +153,10 @@ int main(int argc, char* argv[]) {
       cout << "  Id: " << detections[i].id << " -- "
            << "  Hamming distance: " << detections[i].hammingDistance << endl;
 
-      // also highlight in the image
-      draw_detection(color, detections[i]);
+      if (draw) {
+        // also highlight in the image
+        draw_detection(color, detections[i]);
+      }
 
       // recovering the relative pose requires camera calibration;
       const double tag_size = 0.166; // real side length in meters of square black frame
@@ -100,10 +171,19 @@ int main(int argc, char* argv[]) {
       // suitable factors
     }
 
-    imshow(window_name, color);
+    if (draw) {
+      imshow(window_name, color);
+    }
+
+    frame++;
+    if (frame % 10 == 0) {
+      double t = tic();
+      cout << "  " << 10./(t-last_t) << " fps" << endl;
+      last_t = t;
+    }
 
     // exit if any key pressed
-    if (cv::waitKey(10) >= 0) break;
+    if (cv::waitKey(1) >= 0) break;
   }
 
   return 0;
