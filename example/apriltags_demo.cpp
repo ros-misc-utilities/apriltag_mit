@@ -150,25 +150,52 @@ int main(int argc, char* argv[]) {
     // print out detections
     cout << detections.size() << " tags detected:" << endl;
     for (int i=0; i<detections.size(); i++) {
-      cout << "  Id: " << detections[i].id << " -- "
-           << "  Hamming distance: " << detections[i].hammingDistance << endl;
+
+      cout << "  Id: " << detections[i].id
+           << " (Hamming: " << detections[i].hammingDistance << ")";
 
       if (draw) {
         // also highlight in the image
         draw_detection(color, detections[i]);
       }
 
-      // recovering the relative pose requires camera calibration;
+      // recovering the relative pose of a tag:
+
+      // NOTE: for this to be accurate, it is necessary to use the
+      // actual camera parameters here as well as the actual tag size
+
       const double tag_size = 0.166; // real side length in meters of square black frame
       const double fx = 600; // camera focal length
       const double fy = 600;
       const double px = gray.cols/2; // camera principal point
       const double py = gray.rows/2;
-      Eigen::Matrix4d T = detections[i].getRelativeTransform(tag_size, fx, fy, px, py);
+      Eigen::Matrix4d T =
+        detections[i].getRelativeTransform(tag_size, fx, fy, px, py);
+
+      // recovering rotation and translation from the T matrix;
+      // converting from camera frame (z forward, x right, y down) to
+      // object frame (x forward, y left, z up)
+      Eigen::Matrix4d M;
+      M <<
+        0,  0, 1, 0,
+        -1, 0, 0, 0,
+        0, -1, 0, 0,
+        0,  0, 0, 1;
+      Eigen::Matrix4d MT = M*T;
+      // translation vector from camera to the April tag
+      Eigen::Vector3d trans = MT.col(3).head(3);
+      // orientation of April tag with respect to camera
+      Eigen::Matrix3d rot = MT.block(0,0,3,3);
+
+      cout << "  distance=" << trans.norm()
+           << "m, x=" << trans(0) << ", y=" << trans(1) << ", z=" << trans(2);
+      cout << endl;
+
       // note that for SLAM application it is better to use
       // reprojection error of corner points, as the noise in this
       // relative pose is very non-Gaussian; see iSAM source code for
       // suitable factors
+
     }
 
     if (draw) {
