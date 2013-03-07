@@ -15,6 +15,8 @@ const std::string usage = "\n"
     "Options:\n"
     "  -h  -?       show help options\n"
     "  -d           disable graphics\n"
+    "  -W           image width (availability depends on camera)\n"
+    "  -H           image height (availability depends on camera)\n"
     "\n";
 
 const std::string intro = "\n"
@@ -120,11 +122,12 @@ int main(int argc, char* argv[]) {
     cerr << "ERROR: Can't find video device " << device_id << "\n";
     return -1;
   }
-  //  if (cap.get(CV_CAP_PROP_FRAME_WIDTH) < 640) {
-    // some cams provide a small image by default, try to get a larger one
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
-    //  }
+  cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
+  cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
+  cout << "Camera successfully opened (ignore error messages above...)" << endl;
+  cout << "Actual resolution: "
+       << cap.get(CV_CAP_PROP_FRAME_WIDTH) << "x"
+       << cap.get(CV_CAP_PROP_FRAME_HEIGHT) << endl;
 
   // determines which family of April tags is detected
   AprilTags::TagDetector tag_detector(AprilTags::tagCodes36h11);
