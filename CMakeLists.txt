@@ -10,6 +10,7 @@ include_directories(AprilTags .)
 add_library(apriltags ${SOURCE_FILES})
 
 # working around on annoying OpenCV 2.4 bug that renders pkgconfig useless (reason: malformed --libs)
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 find_package(OpenCV)
 include_directories(${OpenCV_INCLUDE_DIR})
 target_link_libraries(apriltags ${OpenCV_LIBS})
