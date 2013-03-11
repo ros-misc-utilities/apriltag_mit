@@ -7,10 +7,14 @@ include(cmake/pods.cmake)
 
 file(GLOB SOURCE_FILES "src/*.cc")
 include_directories(AprilTags .)
-include_directories(AprilTags /usr/include/eigen3)
 add_library(apriltags ${SOURCE_FILES})
 
-pods_use_pkg_config_packages(apriltags opencv)
+# working around on annoying OpenCV 2.4 bug that renders pkgconfig useless (reason: malformed --libs)
+find_package(OpenCV)
+include_directories(${OpenCV_INCLUDE_DIR})
+target_link_libraries(apriltags ${OpenCV_LIBS})
+
+pods_use_pkg_config_packages(apriltags eigen3)
 
 pods_install_libraries(apriltags)
 
