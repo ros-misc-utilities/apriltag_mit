@@ -6,14 +6,16 @@ set(POD_NAME apriltags)
 include(cmake/pods.cmake)
 
 file(GLOB SOURCE_FILES "src/*.cc")
-include_directories(AprilTags .)
+include_directories(AprilTags . /opt/local/include)
 add_library(apriltags ${SOURCE_FILES})
 
 # working around on annoying OpenCV 2.4 bug that renders pkgconfig useless (reason: malformed --libs)
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+# without this bug would just need to add "opencv" to pods_use_pkg_config_packages below)
+set(OpenCV_DIR ${PROJECT_SOURCE_DIR}/cmake)
 find_package(OpenCV)
-include_directories(${OpenCV_INCLUDE_DIR})
+include_directories(${OpenCV_INCLUDE_DIRS})
 target_link_libraries(apriltags ${OpenCV_LIBS})
+target_link_libraries(apriltags -L/opt/local/lib/) # MacPorts special treatment...
 
 pods_use_pkg_config_packages(apriltags eigen3)
 
