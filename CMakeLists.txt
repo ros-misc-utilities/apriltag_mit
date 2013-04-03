@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(apriltags)
 
+#add_definitions(-pg) #"-fopenmp)
+
 # pull in the pods macros. See cmake/pods.cmake for documentation
 set(POD_NAME apriltags)
 include(cmake/pods.cmake)
@@ -14,7 +16,7 @@ add_library(apriltags ${SOURCE_FILES})
 set(OpenCV_DIR ${PROJECT_SOURCE_DIR}/cmake)
 find_package(OpenCV)
 include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(apriltags ${OpenCV_LIBS})
+target_link_libraries(apriltags ${OpenCV_LIBS}) #-pg) #-fopenmp)
 target_link_libraries(apriltags -L/opt/local/lib/) # MacPorts special treatment...
 
 pods_use_pkg_config_packages(apriltags eigen3)

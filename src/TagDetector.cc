@@ -148,8 +148,10 @@ namespace AprilTags {
   FloatImage fimTheta(fimSeg.getWidth(), fimSeg.getHeight());
   FloatImage fimMag(fimSeg.getWidth(), fimSeg.getHeight());
   
-  for (int y = 1; y+1 < fimSeg.getHeight(); y++) {
-    for (int x = 1; x+1 < fimSeg.getWidth(); x++) {
+
+  #pragma omp parallel for
+  for (int y = 1; y < fimSeg.getHeight()-1; y++) {
+    for (int x = 1; x < fimSeg.getWidth()-1; x++) {
       float Ix = fimSeg.get(x+1, y) - fimSeg.get(x-1, y);
       float Iy = fimSeg.get(x, y+1) - fimSeg.get(x, y-1);
 
