@@ -14,9 +14,9 @@ namespace AprilTags {
 
 class TagCodes {
 public:
-  const int bits;
-  const int minHammingDistance;
-  const std::vector<unsigned long long> codes;
+  int bits;
+  int minHammingDistance;
+  std::vector<unsigned long long> codes;
 public:
  TagCodes(int bits, int minHammingDistance,
           const unsigned long long* codesA, int num)

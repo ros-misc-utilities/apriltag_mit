@@ -5,12 +5,12 @@
  *
  * Opens the first available camera (typically a built in camera in a
  * laptop) and continuously detects April tags in the incoming
- * images. Detections are both shown in the live image and in the text
- * console. Optionally allows selecting of specific camera if multiple
- * are present, specifying image resolution as long as supported by
- * the camera. Also includes the option to send tag detections via a
- * serial port, for example when running on a Raspberry Pi that is
- * connected to an Arduino.
+ * images. Detections are both visualized in the live image and shown
+ * in the text console. Optionally allows selecting of a specific
+ * camera in case multiple ones are present and specifying image
+ * resolution as long as supported by the camera. Also includes the
+ * option to send tag detections via a serial port, for example when
+ * running on a Raspberry Pi that is connected to an Arduino.
  */
 
 using namespace std;
@@ -21,16 +21,19 @@ using namespace std;
 #include <sys/time.h>
 
 const string usage = "\n"
-    "Usage:\n"
-    "  apriltags_demo [OPTION...] [deviceID]\n"
-    "\n"
-    "Options:\n"
-    "  -h  -?       show help options\n"
-    "  -d           disable graphics\n"
-    "  -W           image width (availability depends on camera)\n"
-    "  -H           image height (availability depends on camera)\n"
-    "  -a           Arduino (send tag ids over serial port)\n"
-    "\n";
+  "Usage:\n"
+  "  apriltags_demo [OPTION...] [deviceID]\n"
+  "\n"
+  "Options:\n"
+  "  -h  -?       show help options\n"
+  "  -a           Arduino (send tag ids over serial port)\n"
+  "  -d           disable graphics\n"
+  "  -C <bbxhh>   Tag family (default 36h11)\n"
+  "  -F <fx>      Focal length in pixels\n"
+  "  -W <width>   image width (default 640, availability depends on camera)\n"
+  "  -H <height>  image height (default 480, availability depends on camera)\n"
+  "  -S <size>    Tag size (square black frame) in meters\n"
+  "\n";
 
 const string intro = "\n"
     "April tags test code\n"
@@ -39,29 +42,32 @@ const string intro = "\n"
     "\n";
 
 
-// For Arduino: serial port access
-#include <fcntl.h>
-#include <termios.h>
-
 // OpenCV library for easy access to USB camera and drawing of images
 // on screen
 #include "opencv2/opencv.hpp"
 
-// The actual Apriltag detector and the specific family of tags we are
-// using
+// April tags detector and various families
 #include "AprilTags/TagDetector.h"
+#include "AprilTags/Tag16h5.h"
+#include "AprilTags/Tag25h7.h"
+#include "AprilTags/Tag25h9.h"
+#include "AprilTags/Tag36h9.h"
 #include "AprilTags/Tag36h11.h"
+
 
 // Needed for getopt / command line options processing
 #include <unistd.h>
 extern int optind;
 extern char *optarg;
 
+// For Arduino: locally defined serial port access class
+#include "Serial.h"
+
 
 const char* window_name = "apriltags_demo";
 
 
-// draw April tag detection on actual image
+// draw one April tag detection on actual image
 void draw_detection(cv::Mat& image, const AprilTags::TagDetection& detection) {
   // use corner points detected by line intersection
   pair<float, float> p1 = detection.p[0];
@@ -97,33 +103,69 @@ double tic() {
 
 class Demo {
 
-private:
+  AprilTags::TagDetector* m_tagDetector;
+  AprilTags::TagCodes m_tagCodes;
 
-  bool draw;
-  bool arduino;
-  int width;
-  int height;
-  int device_id;
-  cv::VideoCapture cap;
-  AprilTags::TagDetector tag_detector;
-  int serialPort; // file description for the serial port
+  bool m_draw; // draw image and April tag detections?
+  bool m_arduino; // send tag detections to serial port?
+
+  int m_width; // image size in pixels
+  int m_height;
+  double m_tagSize; // April tag side length in meters of square black frame
+  double m_fx; // camera focal length in pixels
+  double m_fy;
+  double m_px; // camera principal point
+  double m_py;
+
+  int m_deviceId; // camera id (in case of multiple cameras)
+  cv::VideoCapture m_cap;
+
+  Serial m_serial;
 
 public:
 
   // default constructor
   Demo() :
-    draw(true),
-    arduino(false),
-    width(640),
-    height(480),
-    device_id(0),
-    tag_detector(AprilTags::tagCodes36h11), // determines which family of April tags is detected
-    serialPort(-1)
+    // default settings, most can be modified through command line options (see below)
+    m_tagDetector(NULL),
+    m_tagCodes(AprilTags::tagCodes36h11),
+
+    m_draw(true),
+    m_arduino(false),
+
+    m_width(640),
+    m_height(480),
+    m_tagSize(0.166),
+    m_fx(600),
+    m_fy(600),
+    m_px(m_width/2),
+    m_py(m_height/2),
+
+    m_deviceId(0)
   {}
 
-  void process_options(int argc, char* argv[]) {
+  // changing the tag family
+  void setTagCodes(string s) {
+    if (s=="16h5") {
+      m_tagCodes = AprilTags::tagCodes16h5;
+    } else if (s=="25h7") {
+      m_tagCodes = AprilTags::tagCodes25h7;
+    } else if (s=="25h9") {
+      m_tagCodes = AprilTags::tagCodes25h9;
+    } else if (s=="36h9") {
+      m_tagCodes = AprilTags::tagCodes36h9;
+    } else if (s=="36h11") {
+      m_tagCodes = AprilTags::tagCodes36h11;
+    } else {
+      cout << "Invalid tag family specified" << endl;
+      exit(1);
+    }
+  }
+
+  // parse command line options to change default behavior
+  void parseOptions(int argc, char* argv[]) {
     int c;
-    while ((c = getopt(argc, argv, ":h?dW:H:a")) != -1) {
+    while ((c = getopt(argc, argv, ":h?adC:F:H:S:W:")) != -1) {
       // Each option character has to be in the string in getopt();
       // the first colon changes the error character from '?' to ':';
       // a colon after an option means that there is an extra
@@ -135,17 +177,29 @@ public:
         cout << usage;
         exit(0);
         break;
-      case 'd':
-        draw = false;
+      case 'a':
+        m_arduino = true;
         break;
-      case 'W':
-        width = atoi(optarg);
+      case 'd':
+        m_draw = false;
+        break;
+      case 'C':
+        setTagCodes(optarg);
+        break;
+      case 'F':
+        m_fx = atof(optarg);
+        m_fy = m_fx;
+        m_px = m_fx/2.;
+        m_py = m_fy/2.;
         break;
       case 'H':
-        height = atoi(optarg);
+        m_height = atoi(optarg);
         break;
-      case 'a':
-        arduino = true;
+      case 'S':
+        m_tagSize = atof(optarg);
+        break;
+      case 'W':
+        m_width = atoi(optarg);
         break;
       case ':': // unknown option, from getopt
         cout << intro;
@@ -156,53 +210,81 @@ public:
     }
 
     if (argc == optind + 1) {
-      device_id = atoi(argv[optind]);
+      m_deviceId = atoi(argv[optind]);
     }
-
   }
 
   void setup() {
+    m_tagDetector = new AprilTags::TagDetector(m_tagCodes);
 
     // find and open a USB camera (built in laptop camera, web cam etc)
-    cap = cv::VideoCapture(device_id);
-        if(!cap.isOpened()) {
-      cerr << "ERROR: Can't find video device " << device_id << "\n";
+    m_cap = cv::VideoCapture(m_deviceId);
+        if(!m_cap.isOpened()) {
+      cerr << "ERROR: Can't find video device " << m_deviceId << "\n";
       exit(1);
     }
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, width);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, height);
+    m_cap.set(CV_CAP_PROP_FRAME_WIDTH, m_width);
+    m_cap.set(CV_CAP_PROP_FRAME_HEIGHT, m_height);
     cout << "Camera successfully opened (ignore error messages above...)" << endl;
     cout << "Actual resolution: "
-         << cap.get(CV_CAP_PROP_FRAME_WIDTH) << "x"
-         << cap.get(CV_CAP_PROP_FRAME_HEIGHT) << endl;
+         << m_cap.get(CV_CAP_PROP_FRAME_WIDTH) << "x"
+         << m_cap.get(CV_CAP_PROP_FRAME_HEIGHT) << endl;
 
     // prepare window for drawing the camera images
-    if (draw) {
+    if (m_draw) {
       cv::namedWindow(window_name, 1);
     }
 
     // optional: prepare serial port for communication with Arduino
-    if (arduino) {
-      serialPort = open("/dev/ttyACM0", O_RDWR | O_NOCTTY | O_NDELAY);
-      if (serialPort==-1) {
-        cout << "Unable to open serial port" << endl;
-        exit(1);
-      }
-      fcntl(serialPort, F_SETFL,0);
-
-      struct termios port_settings;      // structure to store the port settings in
-
-      cfsetispeed(&port_settings, B9600);    // set baud rates
-      cfsetospeed(&port_settings, B9600);
-
-      port_settings.c_cflag &= ~PARENB;    // set no parity, stop bits, data bits
-      port_settings.c_cflag &= ~CSTOPB;
-      port_settings.c_cflag &= ~CSIZE;
-      port_settings.c_cflag |= CS8;
-	
-      tcsetattr(serialPort, TCSANOW, &port_settings);    // apply the settings to the port
+    if (m_arduino) {
+      m_serial.open("/dev/ttyACM0");
     }
+  }
 
+  // recovering rotation and translation from the T matrix;
+  // converting from camera frame (z forward, x right, y down) to
+  // object frame (x forward, y left, z up)
+  void getTranslationRotation(const Eigen::Matrix4d& T,
+                              Eigen::Vector3d& trans, Eigen::Matrix3d& rot) {
+    Eigen::Matrix4d M;
+    M <<
+      0,  0, 1, 0,
+      -1, 0, 0, 0,
+      0, -1, 0, 0,
+      0,  0, 0, 1;
+    Eigen::Matrix4d MT = M*T;
+    // translation vector from camera to the April tag
+    trans = MT.col(3).head(3);
+    // orientation of April tag with respect to camera
+    rot = MT.block(0,0,3,3);
+  }
+
+  void print_detection(AprilTags::TagDetection& detection) {
+    cout << "  Id: " << detection.id
+         << " (Hamming: " << detection.hammingDistance << ")";
+
+    // recovering the relative pose of a tag:
+
+    // NOTE: for this to be accurate, it is necessary to use the
+    // actual camera parameters here as well as the actual tag size
+
+    Eigen::Matrix4d T =
+      detection.getRelativeTransform(m_tagSize, m_fx, m_fy, m_px, m_py);
+
+    // note that for SLAM application it is better to use
+    // reprojection error of corner points, as the noise in this
+    // relative pose is very non-Gaussian; see iSAM source code for
+    // suitable factors
+
+    Eigen::Vector3d translation;
+    Eigen::Matrix3d rotation;
+    getTranslationRotation(T, translation, rotation);
+
+    cout << "  distance=" << translation.norm()
+         << "m, x=" << translation(0)
+         << ", y=" << translation(1)
+         << ", z=" << translation(2)
+         << endl;
   }
 
   // the processing loop where images are retrieved, tags detected,
@@ -217,87 +299,48 @@ public:
     while (true) {
 
       // capture frame
-      cap >> image;
+      m_cap >> image;
 
-      // detect Apriltags (requires a gray scale image)
+      // detect April tags (requires a gray scale image)
       cv::cvtColor(image, image_gray, CV_BGR2GRAY);
-      vector<AprilTags::TagDetection> detections = tag_detector.extractTags(image_gray);
+      vector<AprilTags::TagDetection> detections = m_tagDetector->extractTags(image_gray);
 
-      // print out detections
+      // print out each detections
       cout << detections.size() << " tags detected:" << endl;
       vector<int> detected_ids;
       for (int i=0; i<detections.size(); i++) {
-
-        cout << "  Id: " << detections[i].id
-             << " (Hamming: " << detections[i].hammingDistance << ")";
-
+        print_detection(detections[i]);
         detected_ids.push_back(detections[i].id);
-
-        if (draw) {
-          // also highlight in the image
-          draw_detection(image, detections[i]);
-        }
-
-        // recovering the relative pose of a tag:
-
-        // NOTE: for this to be accurate, it is necessary to use the
-        // actual camera parameters here as well as the actual tag size
-
-        const double tag_size = 0.166; // real side length in meters of square black frame
-        const double fx = 600; // camera focal length
-        const double fy = 600;
-        const double px = image.cols/2; // camera principal point
-        const double py = image.rows/2;
-        Eigen::Matrix4d T =
-          detections[i].getRelativeTransform(tag_size, fx, fy, px, py);
-
-        // recovering rotation and translation from the T matrix;
-        // converting from camera frame (z forward, x right, y down) to
-        // object frame (x forward, y left, z up)
-        Eigen::Matrix4d M;
-        M <<
-          0,  0, 1, 0,
-          -1, 0, 0, 0,
-          0, -1, 0, 0,
-          0,  0, 0, 1;
-        Eigen::Matrix4d MT = M*T;
-        // translation vector from camera to the April tag
-        Eigen::Vector3d trans = MT.col(3).head(3);
-        // orientation of April tag with respect to camera
-        Eigen::Matrix3d rot = MT.block(0,0,3,3);
-
-        cout << "  distance=" << trans.norm()
-             << "m, x=" << trans(0) << ", y=" << trans(1) << ", z=" << trans(2);
-        cout << endl;
-
-        // note that for SLAM application it is better to use
-        // reprojection error of corner points, as the noise in this
-        // relative pose is very non-Gaussian; see iSAM source code for
-        // suitable factors
-
-      }
-
-      if (arduino) {
-        int id = -1;
-        if (detected_ids.size() > 0) {
-          // write the ID number of the first detected tag to a string
-          stringstream stream;
-          stream << detected_ids[0] << endl;
-          string s = stream.str();
-          // send the string out to the serial port
-          int res = write(serialPort, s.c_str(), s.length());
-        } else {
-          // negative number means no tag detected
-          int res = write(serialPort, "-1\n", 3);
-        }
       }
 
       // draw the current image including any detections
-      if (draw) {
+      if (m_draw) {
+        for (int i=0; i<detections.size(); i++) {
+          // also highlight in the image
+          draw_detection(image, detections[i]);
+        }
         imshow(window_name, image);
       }
 
-      // print out the speed at which image frames are processed
+      // optionally send tag information to serial port
+      if (m_arduino) {
+        if (detected_ids.size() > 0) {
+          // only the first detected tag is sent out for now
+          m_serial.print(detected_ids[0]);
+          m_serial.print(",");
+          m_serial.print(0.);
+          m_serial.print(",");
+          m_serial.print(0.);
+          m_serial.print(",");
+          m_serial.print(0.);
+          m_serial.print("\n");
+        } else {
+          // no tag deteced: tag ID = -1
+          m_serial.print("-1,0.0,0.0,0.0\n");
+        }
+      }
+
+      // print out the frame rate at which image frames are being processed
       frame++;
       if (frame % 10 == 0) {
         double t = tic();
@@ -310,14 +353,15 @@ public:
     }
   }
 
-};
+}; // Demo
+
 
 // here is were everything begins
 int main(int argc, char* argv[]) {
   Demo demo;
 
   // process command line options
-  demo.process_options(argc, argv);
+  demo.parseOptions(argc, argv);
 
   // setup image source, window for drawing, serial port...
   demo.setup();

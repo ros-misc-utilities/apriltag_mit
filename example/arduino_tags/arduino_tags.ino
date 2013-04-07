@@ -4,23 +4,30 @@
  
   Michael Kaess 04/13
  */
- 
-int led = 9;
-int tagId = 0;
 
-// the setup routine runs once when you press reset:
+// pin number for LED
+int led = 9;
+
+// information about detected tag
+int tagId;
+float x, y, z;
+
+// runs once when the program starts
 void setup() {
   // open serial port
-  Serial.begin(9600);
-  // initialize the digital pin as an output.
+  Serial.begin(115200);
+  // initialize pin as output
   pinMode(led, OUTPUT);     
 }
 
-// the loop routine runs over and over again forever:
+// runs over and over again
 void loop() {
   // check if new data is available
   if (Serial.available() > 0) {
     tagId = Serial.parseInt();
+    x = Serial.parseFloat();
+    y = Serial.parseFloat();
+    z = Serial.parseFloat();
     Serial.read(); // ignore newline character
     if (tagId >= 0) {
       digitalWrite(led, HIGH);
@@ -31,4 +38,3 @@ void loop() {
   // wait for 20ms before checking again for new data
   delay(20);
 }
-
