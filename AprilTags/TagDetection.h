@@ -3,6 +3,8 @@
 
 #include <Eigen/Dense>
 
+#include "opencv2/opencv.hpp"
+
 #include <utility>
 #include <vector>
 
@@ -73,11 +75,19 @@ struct TagDetection {
      4x4 homogeneous transformation matrix (see Hartley&Zisserman,
      Multi-View Geometry, 2003). Requires knowledge of physical tag
      size (side length of black square in meters) as well as camera
-     calibration (focal length and principal point)
+     calibration (focal length and principal point); Result is in
+     camera frame (z forward, x right, y down)
   */
   Eigen::Matrix4d getRelativeTransform(double tag_size, double fx, double fy,
-                                       double px, double py);
+                                       double px, double py) const;
 
+  //! Recover rotation matrix and translation vector of April tag relative to camera.
+  // Result is in object frame (x forward, y left, z up)
+  void getRelativeTranslationRotation(double tag_size, double fx, double fy, double px, double py,
+                                      Eigen::Vector3d& trans, Eigen::Matrix3d& rot) const;
+
+  //! Draw the detection within the supplied image, including boarders and tag ID.
+  void draw(cv::Mat& image) const;
 };
 
 } // namespace

@@ -73,7 +73,7 @@ bool TagDetection::overlapsTooMuch(const TagDetection &other) const {
   return ( dist < radius );
 }
 
-Eigen::Matrix4d TagDetection::getRelativeTransform(double tag_size, double fx, double fy, double px, double py) {
+Eigen::Matrix4d TagDetection::getRelativeTransform(double tag_size, double fx, double fy, double px, double py) const {
   std::vector<cv::Point3f> objPts;
   std::vector<cv::Point2f> imgPts;
   double s = tag_size/2.;
@@ -109,6 +109,51 @@ Eigen::Matrix4d TagDetection::getRelativeTransform(double tag_size, double fx, d
   T.row(3) << 0,0,0,1;
 
   return T;
+}
+
+void TagDetection::getRelativeTranslationRotation(double tag_size, double fx, double fy, double px, double py,
+                                                  Eigen::Vector3d& trans, Eigen::Matrix3d& rot) const {
+  Eigen::Matrix4d T =
+    getRelativeTransform(tag_size, fx, fy, px, py);
+
+  // converting from camera frame (z forward, x right, y down) to
+  // object frame (x forward, y left, z up)
+  Eigen::Matrix4d M;
+  M <<
+    0,  0, 1, 0,
+    -1, 0, 0, 0,
+    0, -1, 0, 0,
+    0,  0, 0, 1;
+  Eigen::Matrix4d MT = M*T;
+  // translation vector from camera to the April tag
+  trans = MT.col(3).head(3);
+  // orientation of April tag with respect to camera
+  rot = MT.block(0,0,3,3);
+}
+
+// draw one April tag detection on actual image
+void TagDetection::draw(cv::Mat& image) const {
+  // use corner points detected by line intersection
+  std::pair<float, float> p1 = p[0];
+  std::pair<float, float> p2 = p[1];
+  std::pair<float, float> p3 = p[2];
+  std::pair<float, float> p4 = p[3];
+
+  // plot outline
+  cv::line(image, cv::Point2f(p1.first, p1.second), cv::Point2f(p2.first, p2.second), cv::Scalar(255,0,0,0) );
+  cv::line(image, cv::Point2f(p2.first, p2.second), cv::Point2f(p3.first, p3.second), cv::Scalar(0,255,0,0) );
+  cv::line(image, cv::Point2f(p3.first, p3.second), cv::Point2f(p4.first, p4.second), cv::Scalar(0,0,255,0) );
+  cv::line(image, cv::Point2f(p4.first, p4.second), cv::Point2f(p1.first, p1.second), cv::Scalar(255,0,255,0) );
+
+  // mark center
+  cv::circle(image, cv::Point2f(cxy.first, cxy.second), 8, cv::Scalar(0,0,255,0), 2);
+
+  // print ID
+  std::ostringstream strSt;
+  strSt << "#" << id;
+  cv::putText(image, strSt.str(),
+              cv::Point2f(cxy.first + 10, cxy.second + 10),
+              cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0,0,255));
 }
 
 } // namespace

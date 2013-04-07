@@ -38,12 +38,12 @@ void Serial::open(const string& port) {
 }
 
 // send a string
-void Serial::print(string str) {
+void Serial::print(string str) const {
   int res = ::write(m_serialPort, str.c_str(), str.length());
 }
 
 // send an integer
-void Serial::print(int num) {
+void Serial::print(int num) const {
   stringstream stream;
   stream << num << endl;
   string str = stream.str();
@@ -51,7 +51,7 @@ void Serial::print(int num) {
 }
 
 // send a double
-void Serial::print(double num) {
+void Serial::print(double num) const {
   stringstream stream;
   stream << num << endl;
   string str = stream.str();
@@ -59,6 +59,6 @@ void Serial::print(double num) {
 }
 
 // send a float
-void Serial::print(float num) {
+void Serial::print(float num) const {
   print((double)num);
 }

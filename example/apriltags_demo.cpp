@@ -46,7 +46,7 @@ const string intro = "\n"
 // on screen
 #include "opencv2/opencv.hpp"
 
-// April tags detector and various families
+// April tags detector and various families that can be selected by command line option
 #include "AprilTags/TagDetector.h"
 #include "AprilTags/Tag16h5.h"
 #include "AprilTags/Tag25h7.h"
@@ -66,31 +66,6 @@ extern char *optarg;
 
 const char* window_name = "apriltags_demo";
 
-
-// draw one April tag detection on actual image
-void draw_detection(cv::Mat& image, const AprilTags::TagDetection& detection) {
-  // use corner points detected by line intersection
-  pair<float, float> p1 = detection.p[0];
-  pair<float, float> p2 = detection.p[1];
-  pair<float, float> p3 = detection.p[2];
-  pair<float, float> p4 = detection.p[3];
-
-  // plot outline
-  cv::line(image, cv::Point2f(p1.first, p1.second), cv::Point2f(p2.first, p2.second), cv::Scalar(255,0,0,0) );
-  cv::line(image, cv::Point2f(p2.first, p2.second), cv::Point2f(p3.first, p3.second), cv::Scalar(0,255,0,0) );
-  cv::line(image, cv::Point2f(p3.first, p3.second), cv::Point2f(p4.first, p4.second), cv::Scalar(0,0,255,0) );
-  cv::line(image, cv::Point2f(p4.first, p4.second), cv::Point2f(p1.first, p1.second), cv::Scalar(255,0,255,0) );
-
-  // mark center
-  cv::circle(image, cv::Point2f(detection.cxy.first, detection.cxy.second), 8, cv::Scalar(0,0,255,0), 2);
-
-  // print ID
-  ostringstream strSt;
-  strSt << "#" << detection.id;
-  cv::putText(image, strSt.str(),
-              cv::Point2f(detection.cxy.first + 10, detection.cxy.second + 10),
-              cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0,0,255));
-}
 
 // utility function to provide current system time (used below in
 // determining frame rate at which images are being processed)
@@ -241,25 +216,7 @@ public:
     }
   }
 
-  // recovering rotation and translation from the T matrix;
-  // converting from camera frame (z forward, x right, y down) to
-  // object frame (x forward, y left, z up)
-  void getTranslationRotation(const Eigen::Matrix4d& T,
-                              Eigen::Vector3d& trans, Eigen::Matrix3d& rot) {
-    Eigen::Matrix4d M;
-    M <<
-      0,  0, 1, 0,
-      -1, 0, 0, 0,
-      0, -1, 0, 0,
-      0,  0, 0, 1;
-    Eigen::Matrix4d MT = M*T;
-    // translation vector from camera to the April tag
-    trans = MT.col(3).head(3);
-    // orientation of April tag with respect to camera
-    rot = MT.block(0,0,3,3);
-  }
-
-  void print_detection(AprilTags::TagDetection& detection) {
+  void print_detection(AprilTags::TagDetection& detection) const {
     cout << "  Id: " << detection.id
          << " (Hamming: " << detection.hammingDistance << ")";
 
@@ -267,27 +224,26 @@ public:
 
     // NOTE: for this to be accurate, it is necessary to use the
     // actual camera parameters here as well as the actual tag size
-
-    Eigen::Matrix4d T =
-      detection.getRelativeTransform(m_tagSize, m_fx, m_fy, m_px, m_py);
-
-    // note that for SLAM application it is better to use
-    // reprojection error of corner points, as the noise in this
-    // relative pose is very non-Gaussian; see iSAM source code for
-    // suitable factors
+    // (m_fx, m_fy, m_px, m_py, m_tagSize)
 
     Eigen::Vector3d translation;
     Eigen::Matrix3d rotation;
-    getTranslationRotation(T, translation, rotation);
+    detection.getRelativeTranslationRotation(m_tagSize, m_fx, m_fy, m_px, m_py,
+                                             translation, rotation);
 
     cout << "  distance=" << translation.norm()
          << "m, x=" << translation(0)
          << ", y=" << translation(1)
          << ", z=" << translation(2)
          << endl;
+
+    // Also note that for SLAM/multi-view application it is better to
+    // use reprojection error of corner points, because the noise in
+    // this relative pose is very non-Gaussian; see iSAM source code
+    // for suitable factors.
   }
 
-  // the processing loop where images are retrieved, tags detected,
+  // The processing loop where images are retrieved, tags detected,
   // and information about detections generated
   void loop() {
 
@@ -305,37 +261,39 @@ public:
       cv::cvtColor(image, image_gray, CV_BGR2GRAY);
       vector<AprilTags::TagDetection> detections = m_tagDetector->extractTags(image_gray);
 
-      // print out each detections
+      // print out each detection
       cout << detections.size() << " tags detected:" << endl;
-      vector<int> detected_ids;
       for (int i=0; i<detections.size(); i++) {
         print_detection(detections[i]);
-        detected_ids.push_back(detections[i].id);
       }
 
-      // draw the current image including any detections
+      // show the current image including any detections
       if (m_draw) {
         for (int i=0; i<detections.size(); i++) {
           // also highlight in the image
-          draw_detection(image, detections[i]);
+          detections[i].draw(image);
         }
-        imshow(window_name, image);
+        imshow(window_name, image); // OpenCV call
       }
 
-      // optionally send tag information to serial port
+      // optionally send tag information to serial port (e.g. to Arduino)
       if (m_arduino) {
-        if (detected_ids.size() > 0) {
+        if (detections.size() > 0) {
           // only the first detected tag is sent out for now
-          m_serial.print(detected_ids[0]);
+          Eigen::Vector3d translation;
+          Eigen::Matrix3d rotation;
+          detections[0].getRelativeTranslationRotation(m_tagSize, m_fx, m_fy, m_px, m_py,
+                                                       translation, rotation);
+          m_serial.print(detections[0].id);
           m_serial.print(",");
-          m_serial.print(0.);
+          m_serial.print(translation(0));
           m_serial.print(",");
-          m_serial.print(0.);
+          m_serial.print(translation(1));
           m_serial.print(",");
-          m_serial.print(0.);
+          m_serial.print(translation(2));
           m_serial.print("\n");
         } else {
-          // no tag deteced: tag ID = -1
+          // no tag detected: tag ID = -1
           m_serial.print("-1,0.0,0.0,0.0\n");
         }
       }

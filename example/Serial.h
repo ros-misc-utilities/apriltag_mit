@@ -21,15 +21,15 @@ public:
   void open(const std::string& port);
 
   // send a string
-  void print(std::string str);
+  void print(std::string str) const;
 
   // send an integer
-  void print(int num);
+  void print(int num) const;
 
   // send a double
-  void print(double num);
+  void print(double num) const;
 
   // send a float
-  void print(float num);
+  void print(float num) const;
 
 };
