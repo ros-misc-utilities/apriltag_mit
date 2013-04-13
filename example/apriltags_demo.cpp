@@ -42,6 +42,16 @@ const string intro = "\n"
     "\n";
 
 
+
+//#define EXPOSURE_CONTROL // only works in Linux
+
+#ifdef EXPOSURE_CONTROL
+#include <libv4l2.h>
+#include <linux/videodev2.h>
+#include <fcntl.h>
+#include <errno.h>
+#endif
+
 // OpenCV library for easy access to USB camera and drawing of images
 // on screen
 #include "opencv2/opencv.hpp"
@@ -191,6 +201,35 @@ public:
 
   void setup() {
     m_tagDetector = new AprilTags::TagDetector(m_tagCodes);
+
+#ifdef EXPOSURE_CONTROL
+    // manually setting camera exposure settings; OpenCV/v4l1 doesn't
+    // support exposure control; so here we manually use v4l2 before
+    // opening the device via OpenCV; confirmed to work with Logitech
+    // C270
+    int exposure   = 20;  // 0-10000 range
+    int gain       = 100; // 0-255 range
+    int brightness = 150; // 0-255 range
+
+    string video_str = "/dev/video0";
+    video_str[10] = '0' + m_deviceId;
+    int device = v4l2_open(video_str.c_str(), O_RDWR | O_NONBLOCK);
+    cout << "device " << device << endl;
+
+    // not sure why, but v4l2_set_control() does not work for
+    // V4L2_CID_EXPOSURE_AUTO...
+    struct v4l2_control c;
+    c.id = V4L2_CID_EXPOSURE_AUTO;
+    c.value = 1; // 1=manual, 3=auto; V4L2_EXPOSURE_AUTO fails...
+    if (v4l2_ioctl(device, VIDIOC_S_CTRL, &c) != 0) {
+      cout << "Failed to set... " << strerror(errno) << endl;
+    }
+
+    v4l2_set_control(device, V4L2_CID_EXPOSURE_ABSOLUTE, exposure*6);
+    v4l2_set_control(device, V4L2_CID_GAIN, gain*256);
+    v4l2_set_control(device, V4L2_CID_BRIGHTNESS, brightness*256);
+    v4l2_close(device);
+#endif 
 
     // find and open a USB camera (built in laptop camera, web cam etc)
     m_cap = cv::VideoCapture(m_deviceId);
