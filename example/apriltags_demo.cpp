@@ -25,14 +25,17 @@ const string usage = "\n"
   "  apriltags_demo [OPTION...] [deviceID]\n"
   "\n"
   "Options:\n"
-  "  -h  -?       show help options\n"
-  "  -a           Arduino (send tag ids over serial port)\n"
-  "  -d           disable graphics\n"
-  "  -C <bbxhh>   Tag family (default 36h11)\n"
-  "  -F <fx>      Focal length in pixels\n"
-  "  -W <width>   image width (default 640, availability depends on camera)\n"
-  "  -H <height>  image height (default 480, availability depends on camera)\n"
-  "  -S <size>    Tag size (square black frame) in meters\n"
+  "  -h  -?          Show help options\n"
+  "  -a              Arduino (send tag ids over serial port)\n"
+  "  -d              disable graphics\n"
+  "  -C <bbxhh>      Tag family (default 36h11)\n"
+  "  -F <fx>         Focal length in pixels\n"
+  "  -W <width>      Image width (default 640, availability depends on camera)\n"
+  "  -H <height>     Image height (default 480, availability depends on camera)\n"
+  "  -S <size>       Tag size (square black frame) in meters\n"
+  "  -E <exposure>   Manually set camera exposure (default auto; range 0-10000)\n"
+  "  -G <gain>       Manually set camera gain (default auto; range 0-255)\n"
+  "  -B <brightness> Manually set the camera brightness (default 128; range 0-255)\n"
   "\n";
 
 const string intro = "\n"
@@ -43,7 +46,7 @@ const string intro = "\n"
 
 
 
-//#define EXPOSURE_CONTROL // only works in Linux
+#define EXPOSURE_CONTROL // only works in Linux
 
 #ifdef EXPOSURE_CONTROL
 #include <libv4l2.h>
@@ -105,6 +108,10 @@ class Demo {
   int m_deviceId; // camera id (in case of multiple cameras)
   cv::VideoCapture m_cap;
 
+  int m_exposure;
+  int m_gain;
+  int m_brightness;
+
   Serial m_serial;
 
 public:
@@ -125,6 +132,10 @@ public:
     m_fy(600),
     m_px(m_width/2),
     m_py(m_height/2),
+
+    m_exposure(-1),
+    m_gain(-1),
+    m_brightness(-1),
 
     m_deviceId(0)
   {}
@@ -150,7 +161,7 @@ public:
   // parse command line options to change default behavior
   void parseOptions(int argc, char* argv[]) {
     int c;
-    while ((c = getopt(argc, argv, ":h?adC:F:H:S:W:")) != -1) {
+    while ((c = getopt(argc, argv, ":h?adC:F:H:S:W:E:G:B:")) != -1) {
       // Each option character has to be in the string in getopt();
       // the first colon changes the error character from '?' to ':';
       // a colon after an option means that there is an extra
@@ -186,6 +197,15 @@ public:
       case 'W':
         m_width = atoi(optarg);
         break;
+      case 'E':
+        m_exposure = atoi(optarg);
+        break;
+      case 'G':
+        m_gain = atoi(optarg);
+        break;
+      case 'B':
+        m_brightness = atoi(optarg);
+        break;
       case ':': // unknown option, from getopt
         cout << intro;
         cout << usage;
@@ -206,28 +226,32 @@ public:
     // manually setting camera exposure settings; OpenCV/v4l1 doesn't
     // support exposure control; so here we manually use v4l2 before
     // opening the device via OpenCV; confirmed to work with Logitech
-    // C270
-    int exposure   = 20;  // 0-10000 range
-    int gain       = 100; // 0-255 range
-    int brightness = 150; // 0-255 range
+    // C270; try exposure=20, gain=100, brightness=150
 
     string video_str = "/dev/video0";
     video_str[10] = '0' + m_deviceId;
     int device = v4l2_open(video_str.c_str(), O_RDWR | O_NONBLOCK);
-    cout << "device " << device << endl;
 
-    // not sure why, but v4l2_set_control() does not work for
-    // V4L2_CID_EXPOSURE_AUTO...
-    struct v4l2_control c;
-    c.id = V4L2_CID_EXPOSURE_AUTO;
-    c.value = 1; // 1=manual, 3=auto; V4L2_EXPOSURE_AUTO fails...
-    if (v4l2_ioctl(device, VIDIOC_S_CTRL, &c) != 0) {
-      cout << "Failed to set... " << strerror(errno) << endl;
+    if (m_exposure >= 0) {
+      // not sure why, but v4l2_set_control() does not work for
+      // V4L2_CID_EXPOSURE_AUTO...
+      struct v4l2_control c;
+      c.id = V4L2_CID_EXPOSURE_AUTO;
+      c.value = 1; // 1=manual, 3=auto; V4L2_EXPOSURE_AUTO fails...
+      if (v4l2_ioctl(device, VIDIOC_S_CTRL, &c) != 0) {
+        cout << "Failed to set... " << strerror(errno) << endl;
+      }
+      cout << "exposure: " << m_exposure << endl;
+      v4l2_set_control(device, V4L2_CID_EXPOSURE_ABSOLUTE, m_exposure*6);
     }
-
-    v4l2_set_control(device, V4L2_CID_EXPOSURE_ABSOLUTE, exposure*6);
-    v4l2_set_control(device, V4L2_CID_GAIN, gain*256);
-    v4l2_set_control(device, V4L2_CID_BRIGHTNESS, brightness*256);
+    if (m_gain >= 0) {
+      cout << "gain: " << m_gain << endl;
+      v4l2_set_control(device, V4L2_CID_GAIN, m_gain*256);
+    }
+    if (m_brightness >= 0) {
+      cout << "brightness: " << m_brightness << endl;
+      v4l2_set_control(device, V4L2_CID_BRIGHTNESS, m_brightness*256);
+    }
     v4l2_close(device);
 #endif 
 
