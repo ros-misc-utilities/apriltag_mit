@@ -185,17 +185,17 @@ public:
       case 'F':
         m_fx = atof(optarg);
         m_fy = m_fx;
-        m_px = m_fx/2.;
-        m_py = m_fy/2.;
         break;
       case 'H':
         m_height = atoi(optarg);
-        break;
+        m_py = m_height/2;
+         break;
       case 'S':
         m_tagSize = atof(optarg);
         break;
       case 'W':
         m_width = atoi(optarg);
+        m_px = m_width/2;
         break;
       case 'E':
         m_exposure = atoi(optarg);
@@ -319,6 +319,12 @@ public:
 
       // capture frame
       m_cap >> image;
+
+      // alternative way is to grab, then retrieve; allows for
+      // multiple grab when processing below frame rate - v4l keeps a
+      // number of frames buffered, which can lead to significant lag
+      //      m_cap.grab();
+      //      m_cap.retrieve(image);
 
       // detect April tags (requires a gray scale image)
       cv::cvtColor(image, image_gray, CV_BGR2GRAY);
