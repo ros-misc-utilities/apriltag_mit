@@ -28,7 +28,7 @@ pods_install_headers(${header_files} DESTINATION AprilTags/)
 
 pods_install_pkg_config_file(apriltags
     LIBS -lapriltags
-    REQUIRES eigen3 opencv
+    REQUIRES eigen3 #opencv
     VERSION 1.0.0)
 
 add_subdirectory(example)
