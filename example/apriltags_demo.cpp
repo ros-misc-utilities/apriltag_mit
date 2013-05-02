@@ -45,8 +45,9 @@ const string intro = "\n"
     "\n";
 
 
-
+#ifndef __APPLE__
 #define EXPOSURE_CONTROL // only works in Linux
+#endif
 
 #ifdef EXPOSURE_CONTROL
 #include <libv4l2.h>
@@ -198,12 +199,24 @@ public:
         m_px = m_width/2;
         break;
       case 'E':
+#ifndef EXPOSURE_CONTROL
+        cout << "Error: Exposure option (-E) not available" << endl;
+        exit(1);
+#endif
         m_exposure = atoi(optarg);
         break;
       case 'G':
+#ifndef EXPOSURE_CONTROL
+        cout << "Error: Gain option (-G) not available" << endl;
+        exit(1);
+#endif
         m_gain = atoi(optarg);
         break;
       case 'B':
+#ifndef EXPOSURE_CONTROL
+        cout << "Error: Brightness option (-B) not available" << endl;
+        exit(1);
+#endif
         m_brightness = atoi(optarg);
         break;
       case ':': // unknown option, from getopt
