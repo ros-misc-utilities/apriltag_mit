@@ -18,7 +18,13 @@ public:
   Serial() : m_serialPort(-1) {}
 
   // open a serial port connection
-  void open(const std::string& port);
+  void open(const std::string& port, int rate = 115200);
+
+  // read a single character
+  int read() const;
+
+  // read until special character up to a maximum number of bytes
+  std::string readBytesUntil(unsigned char until, int length = 300);
 
   // send a string
   void print(std::string str) const;
