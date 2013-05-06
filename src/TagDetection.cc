@@ -99,7 +99,7 @@ Eigen::Matrix4d TagDetection::getRelativeTransform(double tag_size, double fx, d
   cv::Vec4f distParam(0,0,0,0); // all 0?
   cv::solvePnP(objPts, imgPts, cameraMatrix, distParam, rvec, tvec);
   cv::Matx33d r;
-  Rodrigues(rvec, r);
+  cv::Rodrigues(rvec, r);
   Eigen::Matrix3d wRo;
   wRo << r(0,0), r(0,1), r(0,2), r(1,0), r(1,1), r(1,2), r(2,0), r(2,1), r(2,2);
 
@@ -127,8 +127,10 @@ void TagDetection::getRelativeTranslationRotation(double tag_size, double fx, do
   Eigen::Matrix4d MT = M*T;
   // translation vector from camera to the April tag
   trans = MT.col(3).head(3);
-  // orientation of April tag with respect to camera
-  rot = MT.block(0,0,3,3);
+  // orientation of April tag with respect to camera: the camera
+  // convention makes more sense here, because yaw,pitch,roll then
+  // naturally agree with the orientation of the object
+  rot = T.block(0,0,3,3);
 }
 
 // draw one April tag detection on actual image
