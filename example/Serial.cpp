@@ -22,7 +22,7 @@ void Serial::open(const string& port, int rate) {
     cout << "Unable to open serial port" << endl;
     exit(1);
   }
-  fcntl(m_serialPort, F_SETFL,0);
+  fcntl(m_serialPort, F_SETFL,0); // O_NONBLOCK might be needed for write...
 
   struct termios port_settings;      // structure to store the port settings in
   tcgetattr(m_serialPort, &port_settings); // get current settings
@@ -30,16 +30,16 @@ void Serial::open(const string& port, int rate) {
   speed_t b;
   switch(rate) {
   case(9600):
-    b = B38400;
+    b = B9600;
     break;
   case(19200):
-    b = B38400;
+    b = B19200;
     break;
   case(38400):
     b = B38400;
     break;
   case(115200):
-    b = B38400;
+    b = B115200;
     break;
   default:
     cout << "Error: Unknown baud rate requested in Serial.open()" << endl;
@@ -93,7 +93,7 @@ void Serial::print(string str) const {
 // send an integer
 void Serial::print(int num) const {
   stringstream stream;
-  stream << num << endl;
+  stream << num;
   string str = stream.str();
   print(str);
 }
@@ -101,7 +101,7 @@ void Serial::print(int num) const {
 // send a double
 void Serial::print(double num) const {
   stringstream stream;
-  stream << num << endl;
+  stream << num;
   string str = stream.str();
   print(str);
 }
