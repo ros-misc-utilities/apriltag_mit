@@ -20,6 +20,9 @@ target_link_libraries(apriltags ${OpenCV_LIBS}) #-pg) #-fopenmp)
 target_link_libraries(apriltags -L/opt/local/lib/) # MacPorts special treatment...
 
 pods_use_pkg_config_packages(apriltags eigen3)
+if (${UNIX}) # not available on Mac
+  pods_use_pkg_config_packages(apriltags libv4l2)
+endif (${UNIX})
 
 pods_install_libraries(apriltags)
 
