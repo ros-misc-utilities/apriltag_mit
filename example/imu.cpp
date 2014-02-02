@@ -42,6 +42,9 @@ void parse(string s) {
   // did we read the correct number of entries, or did the line contain other information?
   if (num==12 || num==16 || num==21) {
     cout << "Euler angles: " << yaw << "," << pitch << "," << roll << endl;
+    double p = atan2(accelX, accelZ);
+    double r = atan2(accelY, accelZ);
+    cout << accelX << " " << accelY << " " << accelZ << "pitch: " << p << " roll: " << r << endl;
   } else {
     //    cout << "Could not parse string " << num << endl;
   }

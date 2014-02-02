@@ -18,17 +18,20 @@ using namespace std;
 #include <iostream>
 #include <cstring>
 #include <vector>
+#include <list>
 #include <sys/time.h>
 
 const string usage = "\n"
   "Usage:\n"
-  "  apriltags_demo [OPTION...] [deviceID]\n"
+  "  apriltags_demo [OPTION...] [IMG1 [IMG2...]]\n"
   "\n"
   "Options:\n"
   "  -h  -?          Show help options\n"
   "  -a              Arduino (send tag ids over serial port)\n"
-  "  -d              disable graphics\n"
+  "  -d              Disable graphics\n"
+  "  -t              Timing of tag extraction\n"
   "  -C <bbxhh>      Tag family (default 36h11)\n"
+  "  -D <id>         Video device ID (if multiple cameras present)\n"
   "  -F <fx>         Focal length in pixels\n"
   "  -W <width>      Image width (default 640, availability depends on camera)\n"
   "  -H <height>     Image height (default 480, availability depends on camera)\n"
@@ -40,7 +43,7 @@ const string usage = "\n"
 
 const string intro = "\n"
     "April tags test code\n"
-    "(C) 2012-2013 Massachusetts Institute of Technology\n"
+    "(C) 2012-2014 Massachusetts Institute of Technology\n"
     "Michael Kaess\n"
     "\n";
 
@@ -78,7 +81,7 @@ extern char *optarg;
 #include "Serial.h"
 
 
-const char* window_name = "apriltags_demo";
+const char* windowName = "apriltags_demo";
 
 
 // utility function to provide current system time (used below in
@@ -109,13 +112,16 @@ inline double standardRad(double t) {
   return t;
 }
 
+/**
+ * Convert rotation matrix to Euler angles
+ */
 void wRo_to_euler(const Eigen::Matrix3d& wRo, double& yaw, double& pitch, double& roll) {
     yaw = standardRad(atan2(wRo(1,0), wRo(0,0)));
     double c = cos(yaw);
     double s = sin(yaw);
     pitch = standardRad(atan2(-wRo(2,0), wRo(0,0)*c + wRo(1,0)*s));
     roll  = standardRad(atan2(wRo(0,2)*s - wRo(1,2)*c, -wRo(0,1)*s + wRo(1,1)*c));
-  }
+}
 
 
 class Demo {
@@ -125,6 +131,7 @@ class Demo {
 
   bool m_draw; // draw image and April tag detections?
   bool m_arduino; // send tag detections to serial port?
+  bool m_timing; // print timing information for each tag extraction call
 
   int m_width; // image size in pixels
   int m_height;
@@ -135,6 +142,9 @@ class Demo {
   double m_py;
 
   int m_deviceId; // camera id (in case of multiple cameras)
+
+  list<string> m_imgNames;
+
   cv::VideoCapture m_cap;
 
   int m_exposure;
@@ -247,6 +257,9 @@ public:
 #endif
         m_brightness = atoi(optarg);
         break;
+      case 'D':
+        m_deviceId = atoi(optarg);
+        break;
       case ':': // unknown option, from getopt
         cout << intro;
         cout << usage;
@@ -255,13 +268,28 @@ public:
       }
     }
 
-    if (argc == optind + 1) {
-      m_deviceId = atoi(argv[optind]);
+    if (argc > optind) {
+      for (int i=0; i<argc-optind; i++) {
+        m_imgNames.push_back(argv[optind+i]);
+      }
     }
   }
 
   void setup() {
     m_tagDetector = new AprilTags::TagDetector(m_tagCodes);
+
+    // prepare window for drawing the camera images
+    if (m_draw) {
+      cv::namedWindow(windowName, 1);
+    }
+
+    // optional: prepare serial port for communication with Arduino
+    if (m_arduino) {
+      m_serial.open("/dev/ttyACM0");
+    }
+  }
+
+  void setupVideo() {
 
 #ifdef EXPOSURE_CONTROL
     // manually setting camera exposure settings; OpenCV/v4l1 doesn't
@@ -309,15 +337,6 @@ public:
          << m_cap.get(CV_CAP_PROP_FRAME_WIDTH) << "x"
          << m_cap.get(CV_CAP_PROP_FRAME_HEIGHT) << endl;
 
-    // prepare window for drawing the camera images
-    if (m_draw) {
-      cv::namedWindow(window_name, 1);
-    }
-
-    // optional: prepare serial port for communication with Arduino
-    if (m_arduino) {
-      m_serial.open("/dev/ttyACM0");
-    }
   }
 
   void print_detection(AprilTags::TagDetection& detection) const {
@@ -359,6 +378,80 @@ public:
     // for suitable factors.
   }
 
+  void processImage(cv::Mat& image, cv::Mat& image_gray) {
+    // alternative way is to grab, then retrieve; allows for
+    // multiple grab when processing below frame rate - v4l keeps a
+    // number of frames buffered, which can lead to significant lag
+    //      m_cap.grab();
+    //      m_cap.retrieve(image);
+
+    // detect April tags (requires a gray scale image)
+    cv::cvtColor(image, image_gray, CV_BGR2GRAY);
+    double t0;
+    if (m_timing) {
+      t0 = tic();
+    }
+    vector<AprilTags::TagDetection> detections = m_tagDetector->extractTags(image_gray);
+    if (m_timing) {
+      double dt = tic()-t0;
+      cout << "Extracting tags took " << dt << " seconds." << endl;
+    }
+
+    // print out each detection
+    cout << detections.size() << " tags detected:" << endl;
+    for (int i=0; i<detections.size(); i++) {
+      print_detection(detections[i]);
+    }
+
+    // show the current image including any detections
+    if (m_draw) {
+      for (int i=0; i<detections.size(); i++) {
+        // also highlight in the image
+        detections[i].draw(image);
+      }
+      imshow(windowName, image); // OpenCV call
+    }
+
+    // optionally send tag information to serial port (e.g. to Arduino)
+    if (m_arduino) {
+      if (detections.size() > 0) {
+        // only the first detected tag is sent out for now
+        Eigen::Vector3d translation;
+        Eigen::Matrix3d rotation;
+        detections[0].getRelativeTranslationRotation(m_tagSize, m_fx, m_fy, m_px, m_py,
+                                                     translation, rotation);
+        m_serial.print(detections[0].id);
+        m_serial.print(",");
+        m_serial.print(translation(0));
+        m_serial.print(",");
+        m_serial.print(translation(1));
+        m_serial.print(",");
+        m_serial.print(translation(2));
+        m_serial.print("\n");
+      } else {
+        // no tag detected: tag ID = -1
+        m_serial.print("-1,0.0,0.0,0.0\n");
+      }
+    }
+  }
+
+  // Load and process a single image
+  void loadImages() {
+    cv::Mat image;
+    cv::Mat image_gray;
+
+    for (list<string>::iterator it=m_imgNames.begin(); it!=m_imgNames.end(); it++) {
+      image = cv::imread(*it); // load image with opencv
+      processImage(image, image_gray);
+      while (cv::waitKey(100) == -1) {}
+    }
+  }
+
+  // Video or image processing?
+  bool isVideo() {
+    return m_imgNames.empty();
+  }
+
   // The processing loop where images are retrieved, tags detected,
   // and information about detections generated
   void loop() {
@@ -373,52 +466,7 @@ public:
       // capture frame
       m_cap >> image;
 
-      // alternative way is to grab, then retrieve; allows for
-      // multiple grab when processing below frame rate - v4l keeps a
-      // number of frames buffered, which can lead to significant lag
-      //      m_cap.grab();
-      //      m_cap.retrieve(image);
-
-      // detect April tags (requires a gray scale image)
-      cv::cvtColor(image, image_gray, CV_BGR2GRAY);
-      vector<AprilTags::TagDetection> detections = m_tagDetector->extractTags(image_gray);
-
-      // print out each detection
-      cout << detections.size() << " tags detected:" << endl;
-      for (int i=0; i<detections.size(); i++) {
-        print_detection(detections[i]);
-      }
-
-      // show the current image including any detections
-      if (m_draw) {
-        for (int i=0; i<detections.size(); i++) {
-          // also highlight in the image
-          detections[i].draw(image);
-        }
-        imshow(window_name, image); // OpenCV call
-      }
-
-      // optionally send tag information to serial port (e.g. to Arduino)
-      if (m_arduino) {
-        if (detections.size() > 0) {
-          // only the first detected tag is sent out for now
-          Eigen::Vector3d translation;
-          Eigen::Matrix3d rotation;
-          detections[0].getRelativeTranslationRotation(m_tagSize, m_fx, m_fy, m_px, m_py,
-                                                       translation, rotation);
-          m_serial.print(detections[0].id);
-          m_serial.print(",");
-          m_serial.print(translation(0));
-          m_serial.print(",");
-          m_serial.print(translation(1));
-          m_serial.print(",");
-          m_serial.print(translation(2));
-          m_serial.print("\n");
-        } else {
-          // no tag detected: tag ID = -1
-          m_serial.print("-1,0.0,0.0,0.0\n");
-        }
-      }
+      processImage(image, image_gray);
 
       // print out the frame rate at which image frames are being processed
       frame++;
@@ -443,11 +491,24 @@ int main(int argc, char* argv[]) {
   // process command line options
   demo.parseOptions(argc, argv);
 
-  // setup image source, window for drawing, serial port...
   demo.setup();
 
-  // the actual processing loop where tags are detected and visualized
-  demo.loop();
+  if (demo.isVideo()) {
+    cout << "Processing video" << endl;
+
+    // setup image source, window for drawing, serial port...
+    demo.setupVideo();
+
+    // the actual processing loop where tags are detected and visualized
+    demo.loop();
+
+  } else {
+    cout << "Processing image" << endl;
+
+    // process single image
+    demo.loadImages();
+
+  }
 
   return 0;
 }
