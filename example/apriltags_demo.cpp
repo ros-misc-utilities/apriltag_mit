@@ -163,6 +163,7 @@ public:
 
     m_draw(true),
     m_arduino(false),
+    m_timing(false),
 
     m_width(640),
     m_height(480),
@@ -200,7 +201,7 @@ public:
   // parse command line options to change default behavior
   void parseOptions(int argc, char* argv[]) {
     int c;
-    while ((c = getopt(argc, argv, ":h?adC:F:H:S:W:E:G:B:")) != -1) {
+    while ((c = getopt(argc, argv, ":h?adtC:F:H:S:W:E:G:B:D:")) != -1) {
       // Each option character has to be in the string in getopt();
       // the first colon changes the error character from '?' to ':';
       // a colon after an option means that there is an extra
@@ -217,6 +218,9 @@ public:
         break;
       case 'd':
         m_draw = false;
+        break;
+      case 't':
+        m_timing = true;
         break;
       case 'C':
         setTagCodes(optarg);
