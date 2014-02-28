@@ -11,10 +11,19 @@ file(GLOB SOURCE_FILES "src/*.cc")
 include_directories(AprilTags . /opt/local/include)
 add_library(apriltags ${SOURCE_FILES})
 
-pods_use_pkg_config_packages(apriltags eigen3 opencv)
-if (NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin") # v4l not available on Mac
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  # working around on annoying OpenCV 2.4 bug that renders pkgconfig useless (reason: malformed --libs)
+  # without this bug would just need to add "opencv" to pods_use_pkg_config_packages below)
+  set(OpenCV_DIR ${PROJECT_SOURCE_DIR}/cmake)
+  find_package(OpenCV)
+  include_directories(${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(apriltags ${OpenCV_LIBS}) #-pg) #-fopenmp)
+  target_link_libraries(apriltags -L/opt/local/lib/) # MacPorts special treatment...
+  pods_use_pkg_config_packages(apriltags eigen3)
+else (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  pods_use_pkg_config_packages(apriltags eigen3 opencv)
   pods_use_pkg_config_packages(apriltags libv4l2)
-endif ()
+endif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 pods_install_libraries(apriltags)
 
