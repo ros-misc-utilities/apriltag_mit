@@ -1,35 +1,47 @@
-cmake_minimum_required(VERSION 2.6)
-project(apriltags)
+cmake_minimum_required(VERSION 3.5)
+project(apriltag_mit)
 
-#add_definitions(-pg) #"-fopenmp)
+set(USE_ROS TRUE)
+set(CMAKE_CXX_STANDARD 11)
 
-# pull in the pods macros. See cmake/pods.cmake for documentation
-set(POD_NAME apriltags)
-include(cmake/pods.cmake)
+find_package(Eigen3 REQUIRED)
+find_package(OpenCV REQUIRED)
+include_directories(include ${OpenCV_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 
-file(GLOB SOURCE_FILES "src/*.cc")
-include_directories(AprilTags . /opt/local/include)
-add_library(apriltags ${SOURCE_FILES})
+if(USE_ROS)
+  find_package(catkin REQUIRED COMPONENTS roslib)
+  catkin_package(DEPENDS
+                 OpenCV
+                 EIGEN3
+                 INCLUDE_DIRS
+                 include
+                 LIBRARIES
+                 ${PROJECT_NAME})
 
-find_package(OpenCV)
-include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(apriltags ${OpenCV_LIBS}) #-pg) #-fopenmp)
-pods_use_pkg_config_packages(apriltags eigen3)
+  include_directories(${catkin_INCLUDE_DIRS})
+  file(GLOB CC_FILES ${PROJECT_SOURCE_DIR}/src/*.cc)
+  add_library(${PROJECT_NAME} SHARED ${CC_FILES})
+  target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBRARIES})
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  target_link_libraries(apriltags -L/opt/local/lib/) # MacPorts special treatment...
-else (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  pods_use_pkg_config_packages(apriltags libv4l2)
-endif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  if(CATKIN_ENABLE_TESTING)
+    catkin_add_gtest(test_apriltag_mit test/test_apriltag_mit.cpp)
+    target_link_libraries(test_apriltag_mit ${catkin_LIBRARIES} ${PROJECT_NAME})
+  endif()
 
-pods_install_libraries(apriltags)
+  install(TARGETS ${PROJECT_NAME}
+          ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+          LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+          RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+  install(DIRECTORY include/${PROJECT_NAME}/
+          DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+else()
+  message(STATUS "Source:  " ${PROJECT_SOURCE_DIR})
+  message(STATUS "Binary:  " ${PROJECT_BINARY_DIR})
+  set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+  set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+  link_directories(${PROJECT_SOURCE_DIR}/lib)
 
-file(GLOB header_files "AprilTags/*.h")
-pods_install_headers(${header_files} DESTINATION AprilTags/)
-
-pods_install_pkg_config_file(apriltags
-    LIBS -lapriltags
-    REQUIRES eigen3 opencv2
-    VERSION 1.0.0)
-
-add_subdirectory(example)
+  file(GLOB CC_FILES ${PROJECT_SOURCE_DIR}/src/*.cc)
+  add_library(${PROJECT_NAME} SHARED ${CC_FILES})
+  target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBRARIES})
+endif()
