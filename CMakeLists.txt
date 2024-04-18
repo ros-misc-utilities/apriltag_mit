@@ -13,11 +13,11 @@ set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED core calib3d)
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED headers)
 
 file(GLOB CC_FILES ${PROJECT_SOURCE_DIR}/src/*.cc)
 add_library(${PROJECT_NAME} SHARED ${CC_FILES})
-target_link_libraries(${PROJECT_NAME} PUBLIC opencv_core opencv_calib3d Eigen3::Eigen Boost::boost)
+target_link_libraries(${PROJECT_NAME} PUBLIC opencv_core opencv_calib3d Eigen3::Eigen Boost::headers)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 14)
 
 target_include_directories(
