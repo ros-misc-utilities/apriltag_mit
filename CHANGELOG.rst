@@ -2,7 +2,7 @@
 Changelog for package apriltag_mit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.2 (2024-04-21)
+------------------
 * Initial release of ROS2 package
 * Contributors:  Michael Kaess, Chao Qu, Bernd Pfrommer
