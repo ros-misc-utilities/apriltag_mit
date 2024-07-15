@@ -9,7 +9,7 @@ project(apriltag_mit VERSION 1.0.0 LANGUAGES CXX)
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
-set(CMAKE_CXX_CLANG_TIDY clang-tidy)
+# set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED core calib3d)
