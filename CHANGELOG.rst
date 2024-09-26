@@ -2,8 +2,8 @@
 Changelog for package apriltag_mit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.3 (2024-09-26)
+------------------
 * Merge branch 'master' into rolling
 * disabled clang-tidy
 * Contributors: Bernd Pfrommer

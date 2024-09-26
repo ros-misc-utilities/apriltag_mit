@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>apriltag_mit</name>
-  <version>1.0.2</version>
+  <version>1.0.3</version>
   <description>ROS2 package wrapper for the MIT apriltag detector</description>
   <author>Michael Kaess</author>
   <maintainer email="bernd.pfrommer@gmail.com">Bernd Pfrommer</maintainer>
