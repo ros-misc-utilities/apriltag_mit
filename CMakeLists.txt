@@ -9,6 +9,10 @@ project(apriltag_mit VERSION 1.0.0 LANGUAGES CXX)
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+add_compile_definitions(_USE_MATH_DEFINES)
+
 # set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 
 find_package(Eigen3 REQUIRED)

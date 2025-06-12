@@ -102,6 +102,13 @@ code_t Rotate90DegCwise(code_t w, int d) {
   return wr;
 }
 
+#ifdef _MSC_VER
+#  include <intrin.h> 
+unsigned __builtin_popcountll( unsigned long long data){
+  return __popcnt(data) + __popcnt(data >> 32);
+}
+#endif
+
 unsigned HammingDistance(code_t a, code_t b) {
   // Because code_t is unsigned long long
   return __builtin_popcountll(a ^ b);
